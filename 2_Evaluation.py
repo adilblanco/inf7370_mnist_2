@@ -120,8 +120,38 @@ x = generator.next()
 #
 # ***********************************************
 
+# Reconstruire les images avec l'autoencodeur
+reconstructed_images = autoencoder.predict(x)
 
+# Choisir une image de la classe 0 et une de la classe 1 pour l'affichage
+# Pour simplifier, prenons la première image de chaque classe
+index_class_0 = 0  # Index de la première image de la classe 0
+index_class_1 = number_images_class_0  # Index de la première image de la classe 1 (après toutes les images de la classe 0)
 
+# Afficher les images originales et reconstruites
+fig, axs = plt.subplots(2, 2, figsize=(8, 8))
+
+# Afficher l'image originale de la classe 0
+axs[0, 0].imshow(x[index_class_0].reshape(image_scale, image_scale) * 255, cmap='gray')
+axs[0, 0].set_title('Original Class 0')
+axs[0, 0].axis('off')
+
+# Afficher l'image reconstruite de la classe 0
+axs[0, 1].imshow(reconstructed_images[index_class_0].reshape(image_scale, image_scale) * 255, cmap='gray')
+axs[0, 1].set_title('Reconstructed Class 0')
+axs[0, 1].axis('off')
+
+# Afficher l'image originale de la classe 1
+axs[1, 0].imshow(x[index_class_1].reshape(image_scale, image_scale) * 255, cmap='gray')
+axs[1, 0].set_title('Original Class 1')
+axs[1, 0].axis('off')
+
+# Afficher l'image reconstruite de la classe 1
+axs[1, 1].imshow(reconstructed_images[index_class_1].reshape(image_scale, image_scale) * 255, cmap='gray')
+axs[1, 1].set_title('Reconstructed Class 1')
+axs[1, 1].axis('off')
+
+plt.show()
 
 # ***********************************************
 #                  QUESTIONS
@@ -139,8 +169,22 @@ input_layer_index = 0 # l'indice de la première couche de l'encodeur (input)
 output_layer_index = 6 # l'indice de la dernière couche (la sortie) de l'encodeur (dépend de votre architecture)
 # note: Pour identifier l'indice de la dernière couche de la partie encodeur, vous pouvez utiliser la fonction "model.summary()"
 # chaque ligne dans le tableau affiché par "model.summary" est compté comme une couche
-encoder = Model(autoencoder.layers[input_layer_index].input, autoencoder.layers[output_layer_index].output)
+# encoder = Model(autoencoder.layers[input_layer_index].input, autoencoder.layers[output_layer_index].output)
 
+encoder_input = autoencoder.layers[input_layer_index].input
+encoder_output = autoencoder.layers[output_layer_index].output
+
+# Vérifiez si la sortie est déjà un vecteur aplati
+# Cela dépend de votre architecture d'autoencodeur spécifique
+# Ajoutez une couche Flatten si nécessaire
+from keras.layers import Flatten
+encoder_output_flattened = Flatten()(encoder_output)
+
+# Création du modèle d'encodeur
+encoder = Model(inputs=encoder_input, outputs=encoder_output_flattened)
+
+# Utilisation de l'encodeur pour obtenir les embeddings
+embeddings = encoder.predict(x)
 
 # ***********************************************
 #                  QUESTIONS
@@ -149,6 +193,10 @@ encoder = Model(autoencoder.layers[input_layer_index].input, autoencoder.layers[
 # 4) Normaliser le flattened embedding (les vecteurs recupérés dans question 3)
 # en utilisant le StandardScaler
 # ***********************************************
+
+# Supposons que 'embeddings' contient les embeddings aplatis obtenus à partir de l'encodeur
+scaler = StandardScaler()
+embeddings_normalized = scaler.fit_transform(embeddings)
 
 # ***********************************************
 #                  QUESTIONS
@@ -160,6 +208,21 @@ encoder = Model(autoencoder.layers[input_layer_index].input, autoencoder.layers[
 #    - Accuracy
 # ***********************************************
 
+from sklearn.model_selection import cross_val_score
+from sklearn.svm import SVC
+
+# Flattening des images originales pour le SVM
+x_flattened = x.reshape((x.shape[0], -1))
+
+# Création du modèle SVM
+svm_model = SVC(kernel='linear')
+
+# Supposons que 'labels' contient les étiquettes de classe pour chaque image
+# Application de la cross-validation
+scores = cross_val_score(svm_model, x_flattened, labels, cv=5)
+
+# Affichage de l'accuracy moyenne
+print(f"Accuracy: {np.mean(scores):.2f}")
 
 # ***********************************************
 #                  QUESTIONS
@@ -171,7 +234,14 @@ encoder = Model(autoencoder.layers[input_layer_index].input, autoencoder.layers[
 #    - Accuracy
 # ***********************************************
 
+# Utilisation des embeddings normalisés pour l'entraînement du SVM
+svm_model_normalized = SVC(kernel='linear')
 
+# Application de la cross-validation sur les embeddings normalisés
+scores_normalized = cross_val_score(svm_model_normalized, embeddings_normalized, labels, cv=5)
+
+# Affichage de l'accuracy moyenne pour les embeddings normalisés
+print(f"Normalized Embeddings Accuracy: {np.mean(scores_normalized):.2f}")
 
 # ***********************************************
 #                  QUESTIONS
@@ -180,3 +250,18 @@ encoder = Model(autoencoder.layers[input_layer_index].input, autoencoder.layers[
 # 7) Appliquer TSNE sur le flattened embedding afin de réduire sa dimensionnalité en 2 dimensions
 # Puis afficher les 2D features dans un scatter plot en utilisant 2 couleurs(une couleur par classe)
 # ***********************************************
+
+from sklearn.manifold import TSNE
+
+# Application de TSNE pour réduire à 2 dimensions
+tsne = TSNE(n_components=2, random_state=42)
+embeddings_tsne = tsne.fit_transform(embeddings_normalized)
+
+# Affichage dans un scatter plot
+plt.figure(figsize=(8, 6))
+plt.scatter(embeddings_tsne[:, 0], embeddings_tsne[:, 1], c=labels, cmap='viridis', alpha=0.5)
+plt.title('TSNE des Embeddings')
+plt.xlabel('Dimension 1')
+plt.ylabel('Dimension 2')
+plt.colorbar(label='Classe')
+plt.show()
